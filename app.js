@@ -201,7 +201,7 @@ async function apiRequest(action, payload = {}, { admin = false } = {}){
 }
 
 async function syncBackend({ admin = false, force = false } = {}){
-  if (state.backendHydrating || (state.backendHydrated && !force && !admin)) return;
+  if (state.backendHydrating || (state.backendHydrated && !force && !admin)) return false;
   state.backendHydrating = true;
   try {
     const headers = {};
@@ -216,8 +216,11 @@ async function syncBackend({ admin = false, force = false } = {}){
     if (Array.isArray(data.products)) state.remoteProducts = data.products;
     if (Array.isArray(data.requests)) state.remoteRequests = data.requests;
     state.backendHydrated = true;
+    return true;
   } catch (err) {
     console.warn('Backend sync skipped:', err?.message || err);
+    state.backendHydrated = true;
+    return false;
   } finally {
     state.backendHydrating = false;
   }
@@ -1344,7 +1347,11 @@ function wire(){
   const needsAdminSync = route.view === 'admin' && isAdminUnlocked() && state.remoteRequests === null;
   if ((!state.backendHydrated || needsAdminSync) && !state.backendHydrating) {
     app.innerHTML = `${siteHeader()}<main class="catalogPanel"><section class="catalogIntro"><span class="eyebrow">Loading</span><h1>Syncing catalog...</h1><p>Pulling the shared catalog data.</p></section></main>${siteFooter()}`;
-    syncBackend({ admin: needsAdminSync, force: needsAdminSync }).then(wire);
+    const timeout = new Promise(resolve => setTimeout(() => resolve(false), 5000));
+    Promise.race([syncBackend({ admin: needsAdminSync, force: needsAdminSync }), timeout]).then(() => {
+      if (!state.backendHydrated) state.backendHydrated = true;
+      wire();
+    });
     return;
   }
   if (!state.logoHydrated && !state.logoHydrating) {
