@@ -5,7 +5,7 @@ export const products = [
     category: 'T-Shirts',
     type: 'Tee',
     name: 'Christ Is King Tee',
-    description: 'Bold faith-forward graphic tee with high-contrast white artwork. Request your size and we’ll confirm availability.',
+    description: 'Bold faith-forward graphic tee with high-contrast white artwork. Choose your size, submit your order, and pay direct.',
     price: 35,
     images: ['./assets/Christ_Is_King_White.png', mockBack('CHRIST IS KING')],
     sizes: ['S','M','L','XL','XXL']
@@ -38,7 +38,7 @@ export const products = [
     category: 'Hoodies',
     type: 'Hoodie',
     name: 'Prestige Luxury Hoodie',
-    description: 'Premium hoodie option for the Prestige graphic. Request-only so production stays intentional.',
+    description: 'Premium hoodie option for the Prestige graphic. Direct-pay ordering so checkout stays painless.',
     price: 75,
     images: [mockHoodie('Prestige Luxury', 'PL'), mockBack('PRESTIGE')],
     sizes: ['S','M','L','XL','XXL']

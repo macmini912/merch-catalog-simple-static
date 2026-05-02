@@ -17,16 +17,16 @@ const APP_VERSION = 'V2';
 
 const DEFAULT_SETTINGS = {
   brandType: 'text',
-  wordmarkTop: 'URBAN',
-  wordmarkBottom: 'THREADS',
+  wordmarkTop: 'CART',
+  wordmarkBottom: 'SKIP',
   logoImage: '',
-  logoAlt: 'Store logo',
+  logoAlt: 'CartSkip logo',
   logoMaxWidth: '180',
-  introEyebrow: 'Request-only catalog',
-  introTitle: 'Premium drops, made intentional.',
-  introText: 'Browse the pieces, choose your size, and send a request. No cart. No checkout pressure. Just clean merch coordination.',
-  footerTitle: 'Request-only catalog',
-  footerText: 'No account. No checkout. Just request what you want.',
+  introEyebrow: 'Direct-pay storefront',
+  introTitle: 'Skip the cart. Take the order.',
+  introText: 'A simple storefront for sellers who want orders without accounts, carts, or card processing friction.',
+  footerTitle: 'CartSkip storefront',
+  footerText: 'No cart. No account. Just order and pay direct.',
   requestEmail: 'orders@example.com',
   notificationsEnabled: 'on',
   notificationEndpoint: 'https://jjvbitlansidirrecrnt.functions.supabase.co/send-merch-request-notification',
@@ -460,14 +460,14 @@ function updateRequest(id, patch){
   const next = loadRequests().map(req => req.id === id ? { ...req, ...patch } : req);
   state.remoteRequests = next;
   saveRequests(next);
-  apiRequest('updateRequest', { id, patch }, { admin: true }).catch(err => console.warn('Shared request update failed:', err?.message || err));
+  apiRequest('updateRequest', { id, patch }, { admin: true }).catch(err => console.warn('Shared order update failed:', err?.message || err));
 }
 
 function deleteRequest(id){
   const next = loadRequests().filter(req => req.id !== id);
   state.remoteRequests = next;
   saveRequests(next);
-  apiRequest('deleteRequest', { id }, { admin: true }).catch(err => console.warn('Shared request delete failed:', err?.message || err));
+  apiRequest('deleteRequest', { id }, { admin: true }).catch(err => console.warn('Shared order delete failed:', err?.message || err));
 }
 
 function slugify(value){
@@ -549,7 +549,7 @@ function downloadRequestsCsv(){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `merch-requests-${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = `cartskip-orders-${new Date().toISOString().slice(0,10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -685,7 +685,7 @@ function siteFooter(){
     <footer class="siteFooter">
       <strong>${escapeHtml(settings.footerTitle)}</strong>
       <span>${escapeHtml(settings.footerText)}</span>
-      <small class="appVersion">Merch App ${escapeHtml(APP_VERSION)}</small>
+      <small class="appVersion">CartSkip ${escapeHtml(APP_VERSION)}</small>
       <a href="#/admin">Admin</a>
     </footer>
   `;
@@ -708,7 +708,7 @@ function renderCatalog(){
         <ol>
           <li>Pick a product.</li>
           <li>Choose your size and quantity.</li>
-          <li>Submit your request — no account or checkout required.</li>
+          <li>Submit your order — no account or card checkout required.</li>
         </ol>
       </section>
     </main>
@@ -739,7 +739,7 @@ function renderCatalog(){
       <div class="productInfo">
         <h2>${escapeHtml(product.name)}</h2>
         <div class="cardPrice">${money(product.price)}</div>
-        <button class="cardRequestBtn" type="button">Request</button>
+        <button class="cardRequestBtn" type="button">Order</button>
       </div>
     </article>
   `).join('') || `<div class="emptyState">No products in this category yet.</div>`;
@@ -767,7 +767,7 @@ function setSelectionFromParams(product, params){
 
 function fmtSummary({ product, size, qty, notes, customerName = '', customerContact = '' }){
   return [
-    `Merch Request: ${product.name}`,
+    `CartSkip Order: ${product.name}`,
     `Item: ${product.type}`,
     `Size: ${size}`,
     `Quantity: ${qty}`,
@@ -781,7 +781,7 @@ function fmtSummary({ product, size, qty, notes, customerName = '', customerCont
 
 async function sendRequestNotification({ request, product, settings, summary }){
   const result = await apiRequest('addRequest', {
-    source: 'merch-catalog-simple',
+    source: 'cartskip-v3',
     store: {
       wordmarkTop: settings.wordmarkTop,
       wordmarkBottom: settings.wordmarkBottom,
@@ -819,12 +819,12 @@ function renderProduct(product, params){
         <div class="field"><label>Quantity</label><div class="qtyStepper"><button id="qtyMinus" type="button">−</button><span id="qtyVal">${selQty}</span><button id="qtyPlus" type="button">+</button></div></div>
         <div class="field"><label>Name</label><input id="nameInput" type="text" maxlength="80" placeholder="Your name" /></div>
         <div class="field"><label>Email or phone</label><input id="contactInput" type="text" maxlength="120" placeholder="Best way to contact you" /></div>
-        <div class="field"><label>Notes <span>(optional)</span></label><textarea id="notesInput" maxlength="250" placeholder="Any details or requests?"></textarea><div class="charCount" id="charCount">0/250</div></div>
-        <button class="primaryBtn requestCta" id="requestBtn" type="button">Request this item</button>
+        <div class="field"><label>Notes <span>(optional)</span></label><textarea id="notesInput" maxlength="250" placeholder="Any order details?"></textarea><div class="charCount" id="charCount">0/250</div></div>
+        <button class="primaryBtn requestCta" id="requestBtn" type="button">Submit order</button>
         <div class="requestStatus" id="requestStatus"></div>
-        <div class="optionalPay">Optional: Send payment with your request</div>
+        <div class="optionalPay">Pay direct with Cash App or Venmo</div>
         <div class="payRow"><a class="payBtn" id="cashPay" href="#" target="_blank" rel="noreferrer">${icon('cash')} Cash App</a><a class="payBtn" id="venmoPay" href="#" target="_blank" rel="noreferrer">${icon('venmo')} Venmo</a></div>
-        <div class="paymentHint" id="paymentHint">Payment is optional and not required.</div>
+        <div class="paymentHint" id="paymentHint">Payment opens in your selected app. Vendor confirms payment manually.</div>
       </section>
       ${siteFooter()}
     </main>
@@ -869,7 +869,7 @@ function renderProduct(product, params){
     const total = currentPaymentTotal();
     cashPay.href = cashAppHref(settings.paymentCash, total, currentPaymentNote());
     venmoPay.href = venmoHref(settings.paymentVenmo, total, currentPaymentNote());
-    paymentHint.innerHTML = `Payment is optional and not required. Links open with <strong>${money(total)}</strong>${selQty > 1 ? ` total (${money(product.price)} × ${selQty})` : ''}.`;
+    paymentHint.innerHTML = `Payment links open with <strong>${money(total)}</strong>${selQty > 1 ? ` total (${money(product.price)} × ${selQty})` : ''}. Vendor confirms payment manually.`;
   }
 
   function setQty(next){
@@ -916,7 +916,7 @@ function renderProduct(product, params){
 
     const summary = fmtSummary({ product, size: selSize, qty: selQty, notes: selNotes, customerName, customerContact });
     try { await navigator.clipboard?.writeText(summary); } catch {}
-    const mailTo = `mailto:${encodeURIComponent(settings.requestEmail)}?subject=${encodeURIComponent(`Merch request: ${product.name}`)}&body=${encodeURIComponent(summary)}`;
+    const mailTo = `mailto:${encodeURIComponent(settings.requestEmail)}?subject=${encodeURIComponent(`CartSkip order: ${product.name}`)}&body=${encodeURIComponent(summary)}`;
     requestBtn.disabled = true;
     [app.querySelector('#nameInput'), app.querySelector('#contactInput'), notesInput, app.querySelector('#qtyMinus'), app.querySelector('#qtyPlus')]
       .filter(Boolean)
@@ -926,26 +926,26 @@ function renderProduct(product, params){
     let notificationNotice = '';
     try {
       const result = await sendRequestNotification({ request, product, settings, summary });
-      if (result.warning) notificationNotice = `<div class="notificationNotice warning">Request saved, but email notification did not send. ${escapeHtml(result.warning)}</div>`;
-      else notificationNotice = '<div class="notificationNotice sent">Request saved and email notification sent.</div>';
+      if (result.warning) notificationNotice = `<div class="notificationNotice warning">Order saved, but email notification did not send. ${escapeHtml(result.warning)}</div>`;
+      else notificationNotice = '<div class="notificationNotice sent">Order saved and email notification sent.</div>';
     } catch (err) {
-      notificationNotice = `<div class="notificationNotice warning">Request saved, but email notification did not send. ${escapeHtml(err?.message || err)}</div>`;
+      notificationNotice = `<div class="notificationNotice warning">Order saved, but email notification did not send. ${escapeHtml(err?.message || err)}</div>`;
     }
 
     requestStatus.innerHTML = `
       <div class="successCard">
         <div class="successMark">✓</div>
-        <h2>Request saved</h2>
-        <p>We have your request and can follow up using the contact info you provided.</p>
+        <h2>Order submitted</h2>
+        <p>Your order details are saved. The vendor will confirm payment and follow up using your contact info.</p>
         <div class="successSummary">
           <span>${escapeHtml(product.name)}</span>
           <strong>${escapeHtml(selSize)} • Qty ${escapeHtml(String(selQty))}</strong>
-          <small>Request #${escapeHtml(request.id.slice(0, 8))}</small>
+          <small>Order #${escapeHtml(request.id.slice(0, 8))}</small>
         </div>
         ${notificationNotice}
         <div class="successActions">
-          <a href="#/" class="successBtn secondary">Back to catalog</a>
-          <a href="${mailTo}" class="successBtn">Email request</a>
+          <a href="#/" class="successBtn secondary">Back to storefront</a>
+          <a href="${mailTo}" class="successBtn">Email order</a>
         </div>
       </div>
     `;
@@ -1019,7 +1019,7 @@ function renderRequestsAdmin(requests, newCount){
             <button type="button" data-action="delete">Delete</button>
           </div>
         </article>
-      `).join('') : `<div class="emptyInbox">No requests yet.</div>`}
+      `).join('') : `<div class="emptyInbox">No orders yet.</div>`}
       </div>
     </section>
   `;
@@ -1029,7 +1029,7 @@ function renderProductsAdmin(){
   return `
     <section class="productManager productManagerTabbed">
       <div class="productManagerTop">
-        <div><h2>Products</h2><p>Edit catalog content without touching code.</p></div>
+        <div><h2>Products</h2><p>Edit storefront products without touching code.</p></div>
         <div class="adminTopActions">
           <button class="secondaryAdminBtn" type="button" id="saveProductsBtn">Save Products</button>
           <button class="secondaryAdminBtn" type="button" id="resetProductsBtn">Reset</button>
@@ -1118,7 +1118,7 @@ function renderSettingsAdmin(){
         ${settingsField('Intro text', 'introText', settings.introText, 'textarea')}
         ${settingsField('Footer title', 'footerTitle', settings.footerTitle)}
         ${settingsField('Footer text', 'footerText', settings.footerText, 'textarea')}
-        ${settingsField('Request email', 'requestEmail', settings.requestEmail, 'email')}
+        ${settingsField('Order email', 'requestEmail', settings.requestEmail, 'email')}
         <div class="settingsSectionTitle">Email notifications</div>
         ${settingsField('Email notifications', 'notificationsEnabled', settings.notificationsEnabled, 'toggle-select')}
         ${settingsField('Notification endpoint', 'notificationEndpoint', settings.notificationEndpoint, 'url')}
@@ -1162,7 +1162,7 @@ function renderAdminLock(){
       <section class="adminLockPanel">
         <span class="eyebrow">Admin access</span>
         <h1>Admin PIN</h1>
-        <p>Enter the shared admin PIN to manage products, settings, and requests.</p>
+        <p>Enter the shared admin PIN to manage products, settings, and orders.</p>
         <label>Admin PIN<input id="adminPasswordInput" type="password" autocomplete="current-password" /></label>
         <button class="primaryBtn" id="adminUnlockBtn" type="button">Unlock</button>
         <button class="resetAdminBtn" id="resetAdminPasswordBtn" type="button">Reset local admin PIN</button>
@@ -1191,7 +1191,7 @@ function renderAdminLock(){
   };
   app.querySelector('#adminUnlockBtn').addEventListener('click', submit);
   app.querySelector('#resetAdminPasswordBtn')?.addEventListener('click', () => {
-    const ok = window.confirm('Reset the local admin password for this browser? Products and requests will stay saved.');
+    const ok = window.confirm('Reset the local admin password for this browser? Products and orders will stay saved.');
     if (!ok) return;
     resetAdminPassword();
     renderAdminLock();
@@ -1213,17 +1213,17 @@ function renderAdmin(tab = 'requests'){
     <main class="adminPage">
       ${siteHeader()}
       <header class="adminTop">
-        <div><h1>Admin</h1><p>${requests.length} requests • ${newCount} new</p></div>
+        <div><h1>Admin</h1><p>${requests.length} orders • ${newCount} new</p></div>
         <div class="adminTopActions">
           <button class="secondaryAdminBtn" type="button" id="exportCsv" ${requests.length ? '' : 'disabled'}>Export CSV</button>
           <button class="secondaryAdminBtn" type="button" id="lockAdminBtn">Lock</button>
-          <button class="secondaryAdminBtn" type="button" id="backCatalog">Catalog</button>
+          <button class="secondaryAdminBtn" type="button" id="backCatalog">Storefront</button>
         </div>
       </header>
       <nav class="adminTabs">
         <button type="button" data-tab="settings" aria-current="${activeTab === 'settings'}">Settings</button>
         <button type="button" data-tab="products" aria-current="${activeTab === 'products'}">Products</button>
-        <button type="button" data-tab="requests" aria-current="${activeTab === 'requests'}">Requests</button>
+        <button type="button" data-tab="requests" aria-current="${activeTab === 'requests'}">Orders</button>
       </nav>
       ${activeTab === 'settings' ? renderSettingsAdmin() : activeTab === 'products' ? renderProductsAdmin() : renderRequestsAdmin(requests, newCount)}
       ${siteFooter()}
@@ -1423,7 +1423,7 @@ function wire(){
   const route = parseRoute();
   const needsAdminSync = route.view === 'admin' && isAdminUnlocked() && !state.adminSyncAttempted;
   if ((!state.backendHydrated || needsAdminSync) && !state.backendHydrating) {
-    app.innerHTML = `${siteHeader()}<main class="catalogPanel"><section class="catalogIntro"><span class="eyebrow">Loading</span><h1>Syncing catalog...</h1><p>Pulling the shared catalog data.</p></section></main>${siteFooter()}`;
+    app.innerHTML = `${siteHeader()}<main class="catalogPanel"><section class="catalogIntro"><span class="eyebrow">Loading</span><h1>Syncing storefront...</h1><p>Pulling the shared storefront data.</p></section></main>${siteFooter()}`;
     const timeout = new Promise(resolve => setTimeout(() => resolve(false), 5000));
     Promise.race([syncBackend({ admin: needsAdminSync, force: needsAdminSync }), timeout]).then(() => {
       if (!state.backendHydrated) state.backendHydrated = true;
