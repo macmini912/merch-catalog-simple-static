@@ -201,6 +201,13 @@ async function apiRequest(action, payload = {}, { admin = false } = {}){
   return data;
 }
 
+async function verifyAdminPin(pin){
+  const res = await fetch(`${BACKEND_API_ENDPOINT}?admin=1`, { headers: { 'x-admin-pin': pin } });
+  if (!res.ok) return false;
+  const data = await res.json().catch(() => ({}));
+  return Array.isArray(data.requests);
+}
+
 async function syncBackend({ admin = false, force = false } = {}){
   if (state.backendHydrating || (state.backendHydrated && !force && !admin)) return false;
   state.backendHydrating = true;
@@ -284,14 +291,16 @@ function hasAdminPassword(){
 }
 
 function isAdminUnlocked(){
-  return sessionStorage.getItem(ADMIN_UNLOCK_KEY) === 'true';
+  return sessionStorage.getItem(ADMIN_UNLOCK_KEY) === 'true' && !!adminPin();
 }
 
 function lockAdmin(){
   sessionStorage.removeItem(ADMIN_UNLOCK_KEY);
+  sessionStorage.removeItem(ADMIN_PIN_SESSION_KEY);
 }
 
 async function setAdminPassword(password){
+  if (!await verifyAdminPin(password)) throw new Error('Incorrect admin PIN.');
   localStorage.setItem(ADMIN_PASSWORD_KEY, await digest(password));
   sessionStorage.setItem(ADMIN_UNLOCK_KEY, 'true');
   sessionStorage.setItem(ADMIN_PIN_SESSION_KEY, password);
@@ -1110,8 +1119,12 @@ function renderAdminLock(){
       msg.textContent = 'Use at least 4 characters.';
       return;
     }
-    await setAdminPassword(value);
-    navAdmin('settings');
+    try {
+      await setAdminPassword(value);
+      navAdmin('settings');
+    } catch (err) {
+      msg.textContent = err?.message || 'Admin unlock failed.';
+    }
   };
   app.querySelector('#adminUnlockBtn').addEventListener('click', submit);
   app.querySelector('#resetAdminPasswordBtn')?.addEventListener('click', () => {
@@ -1126,6 +1139,7 @@ function renderAdminLock(){
 
 function renderAdmin(tab = 'requests'){
   if (!isAdminUnlocked()) {
+    lockAdmin();
     renderAdminLock();
     return;
   }
