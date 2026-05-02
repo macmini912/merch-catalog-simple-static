@@ -159,9 +159,11 @@ function cleanPaymentHandle(handle, prefix){
     .split(/[/?#]/)[0];
 }
 
-function cashAppHref(handle, amount){
+function cashAppHref(handle, amount, note = ''){
   const cashtag = cleanPaymentHandle(handle, '$');
-  return `https://cash.app/$${encodeURIComponent(cashtag)}/${encodeURIComponent(paymentAmount(amount))}`;
+  const params = new URLSearchParams({ amount: paymentAmount(amount) });
+  if (note) params.set('note', note);
+  return `https://cash.app/$${encodeURIComponent(cashtag)}?${params.toString()}`;
 }
 
 function venmoHref(handle, amount, note = ''){
@@ -863,7 +865,7 @@ function renderProduct(product, params){
 
   function updatePaymentLinks(){
     const total = currentPaymentTotal();
-    cashPay.href = cashAppHref(settings.paymentCash, total);
+    cashPay.href = cashAppHref(settings.paymentCash, total, currentPaymentNote());
     venmoPay.href = venmoHref(settings.paymentVenmo, total, currentPaymentNote());
     paymentHint.innerHTML = `Payment is optional and not required. Links open with <strong>${money(total)}</strong>${selQty > 1 ? ` total (${money(product.price)} × ${selQty})` : ''}.`;
   }
