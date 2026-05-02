@@ -107,6 +107,7 @@ svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-l
 .siteFooter{padding:24px clamp(18px,5vw,34px) 28px;background:var(--footer-bg);color:#fff;border-top:1px solid var(--footer-bg);display:grid;gap:6px;text-align:center;margin-top:auto}
 .siteFooter strong{font-size:13px;text-transform:uppercase;letter-spacing:.05em}
 .siteFooter span{font-size:12px;color:#d6d6d6}
+.siteFooter .appVersion{font-size:11px;color:rgba(255,255,255,.5);letter-spacing:.06em;text-transform:uppercase}
 .siteFooter a{justify-self:center;color:#fff;font-size:12px;font-weight:900;text-decoration:none;border-bottom:1px solid rgba(255,255,255,.65);margin-top:4px}
 
 .detailPage{background:var(--panel);min-height:100vh;display:flex;flex-direction:column}
