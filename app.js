@@ -11,6 +11,8 @@ const PRODUCT_IMAGE_PREFIX = 'productImage';
 const EMPTY_IMAGE_SRC = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 const ADMIN_PASSWORD_KEY = 'merchCatalogSimpleAdminPassword';
 const ADMIN_UNLOCK_KEY = 'merchCatalogSimpleAdminUnlocked';
+const ADMIN_PIN_SESSION_KEY = 'merchCatalogSimpleAdminPin';
+const BACKEND_API_ENDPOINT = 'https://jjvbitlansidirrecrnt.functions.supabase.co/merch-catalog-api';
 
 const DEFAULT_SETTINGS = {
   brandType: 'text',
@@ -46,7 +48,12 @@ const state = {
   category: 'All',
   logoImage: '',
   logoHydrating: false,
-  logoHydrated: false
+  logoHydrated: false,
+  backendHydrated: false,
+  backendHydrating: false,
+  remoteSettings: null,
+  remoteProducts: null,
+  remoteRequests: null
 };
 
 function openDB(){
@@ -152,9 +159,9 @@ function setBusy(v){
 
 function loadSettings(){
   try {
-    return { ...DEFAULT_SETTINGS, ...(JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null') || {}) };
+    return { ...DEFAULT_SETTINGS, ...(JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null') || {}), ...(state.remoteSettings || {}) };
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, ...(state.remoteSettings || {}) };
   }
 }
 
@@ -173,6 +180,46 @@ function saveSettings(settings){
     } catch (retryErr) {
       return { ok: false, error: retryErr?.message || err?.message || String(retryErr || err) };
     }
+  }
+}
+
+function adminPin(){
+  return sessionStorage.getItem(ADMIN_PIN_SESSION_KEY) || '';
+}
+
+async function apiRequest(action, payload = {}, { admin = false } = {}){
+  const headers = { 'Content-Type': 'application/json' };
+  if (admin) headers['x-admin-pin'] = adminPin();
+  const res = await fetch(BACKEND_API_ENDPOINT, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ action, ...payload })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Backend request failed (${res.status})`);
+  return data;
+}
+
+async function syncBackend({ admin = false, force = false } = {}){
+  if (state.backendHydrating || (state.backendHydrated && !force && !admin)) return;
+  state.backendHydrating = true;
+  try {
+    const headers = {};
+    if (admin) headers['x-admin-pin'] = adminPin();
+    const res = await fetch(`${BACKEND_API_ENDPOINT}${admin ? '?admin=1' : ''}`, { headers });
+    if (!res.ok) throw new Error(`Backend sync failed (${res.status})`);
+    const data = await res.json();
+    if (data.settings) {
+      state.remoteSettings = data.settings;
+      if (data.settings.logoImage) state.logoImage = data.settings.logoImage;
+    }
+    if (Array.isArray(data.products)) state.remoteProducts = data.products;
+    if (Array.isArray(data.requests)) state.remoteRequests = data.requests;
+    state.backendHydrated = true;
+  } catch (err) {
+    console.warn('Backend sync skipped:', err?.message || err);
+  } finally {
+    state.backendHydrating = false;
   }
 }
 
@@ -236,6 +283,7 @@ function lockAdmin(){
 async function setAdminPassword(password){
   localStorage.setItem(ADMIN_PASSWORD_KEY, await digest(password));
   sessionStorage.setItem(ADMIN_UNLOCK_KEY, 'true');
+  sessionStorage.setItem(ADMIN_PIN_SESSION_KEY, password);
 }
 
 async function unlockAdmin(password){
@@ -244,12 +292,14 @@ async function unlockAdmin(password){
   const next = await digest(password);
   if (next !== saved && next.replace(/^sha256:/, '') !== saved) return false;
   sessionStorage.setItem(ADMIN_UNLOCK_KEY, 'true');
+  sessionStorage.setItem(ADMIN_PIN_SESSION_KEY, password);
   return true;
 }
 
 function resetAdminPassword(){
   localStorage.removeItem(ADMIN_PASSWORD_KEY);
   sessionStorage.removeItem(ADMIN_UNLOCK_KEY);
+  sessionStorage.removeItem(ADMIN_PIN_SESSION_KEY);
 }
 
 function navCatalog(){
@@ -287,6 +337,7 @@ function normalizeProduct(product){
 }
 
 function loadProducts(){
+  if (Array.isArray(state.remoteProducts) && state.remoteProducts.length) return state.remoteProducts.map(normalizeProduct);
   try {
     const parsed = JSON.parse(localStorage.getItem(PRODUCTS_KEY) || 'null');
     return Array.isArray(parsed) && parsed.length ? parsed.map(normalizeProduct) : cloneProducts(seedProducts);
@@ -304,6 +355,25 @@ function saveProducts(products){
   localStorage.setItem(PRODUCTS_KEY, JSON.stringify(compact));
 }
 
+async function productsForBackend(products){
+  return Promise.all(products.map(async product => ({
+    ...product,
+    images: await Promise.all((product.images || []).slice(0, 2).map(src => resolveImageSrc(src)))
+  })));
+}
+
+async function saveProductsRemote(products){
+  const remoteProducts = await productsForBackend(products.map(normalizeProduct));
+  await apiRequest('saveProducts', { products: remoteProducts }, { admin: true });
+  state.remoteProducts = remoteProducts;
+}
+
+async function saveSettingsRemote(settings){
+  const remoteSettings = { ...settings, logoImage: state.logoImage || settings.logoImage || '' };
+  await apiRequest('saveSettings', { settings: remoteSettings }, { admin: true });
+  state.remoteSettings = remoteSettings;
+}
+
 function resetProducts(){
   localStorage.removeItem(PRODUCTS_KEY);
 }
@@ -317,6 +387,7 @@ function makeId(){
 }
 
 function loadRequests(){
+  if (Array.isArray(state.remoteRequests)) return state.remoteRequests;
   try {
     const parsed = JSON.parse(localStorage.getItem(REQUESTS_KEY) || '[]');
     return Array.isArray(parsed) ? parsed : [];
@@ -332,15 +403,23 @@ function saveRequests(requests){
 function addRequest(entry){
   const requests = [entry, ...loadRequests()];
   saveRequests(requests);
+  state.remoteRequests = requests;
+  apiRequest('addRequest', { request: entry }).catch(err => console.warn('Shared request save failed:', err?.message || err));
   return entry;
 }
 
 function updateRequest(id, patch){
-  saveRequests(loadRequests().map(req => req.id === id ? { ...req, ...patch } : req));
+  const next = loadRequests().map(req => req.id === id ? { ...req, ...patch } : req);
+  state.remoteRequests = next;
+  saveRequests(next);
+  apiRequest('updateRequest', { id, patch }, { admin: true }).catch(err => console.warn('Shared request update failed:', err?.message || err));
 }
 
 function deleteRequest(id){
-  saveRequests(loadRequests().filter(req => req.id !== id));
+  const next = loadRequests().filter(req => req.id !== id);
+  state.remoteRequests = next;
+  saveRequests(next);
+  apiRequest('deleteRequest', { id }, { admin: true }).catch(err => console.warn('Shared request delete failed:', err?.message || err));
 }
 
 function slugify(value){
@@ -511,6 +590,7 @@ async function saveProductEditorItem(item){
   const product = await readProductEditorItem(item);
   const next = loadProducts().map(existing => existing.id === product.id ? product : existing);
   saveProducts(next);
+  await saveProductsRemote(next);
   return product;
 }
 
@@ -1116,7 +1196,8 @@ function renderAdmin(tab = 'requests'){
         edited.push(await readProductEditorItem(item));
       }
       saveProducts(edited);
-      if (msg) msg.textContent = 'Products saved.';
+      await saveProductsRemote(edited);
+      if (msg) msg.textContent = 'Products saved and synced.';
       renderAdmin('products');
     } catch (err) {
       if (msg) msg.textContent = `Save failed: ${err?.message || err}`;
@@ -1228,7 +1309,13 @@ function renderAdmin(tab = 'requests'){
       app.querySelector('#settingsSaveMsg').textContent = `Settings save failed: ${result.error}`;
       return;
     }
-    app.querySelector('#settingsSaveMsg').textContent = 'Settings saved.';
+    try {
+      await saveSettingsRemote(next);
+      app.querySelector('#settingsSaveMsg').textContent = 'Settings saved and synced.';
+    } catch (err) {
+      app.querySelector('#settingsSaveMsg').textContent = `Settings saved locally, but sync failed: ${err?.message || err}`;
+      return;
+    }
     renderAdmin('settings');
   });
 
@@ -1254,6 +1341,12 @@ function renderAdmin(tab = 'requests'){
 function wire(){
   applyTheme();
   const route = parseRoute();
+  const needsAdminSync = route.view === 'admin' && isAdminUnlocked() && state.remoteRequests === null;
+  if ((!state.backendHydrated || needsAdminSync) && !state.backendHydrating) {
+    app.innerHTML = `${siteHeader()}<main class="catalogPanel"><section class="catalogIntro"><span class="eyebrow">Loading</span><h1>Syncing catalog...</h1><p>Pulling the shared catalog data.</p></section></main>${siteFooter()}`;
+    syncBackend({ admin: needsAdminSync, force: needsAdminSync }).then(wire);
+    return;
+  }
   if (!state.logoHydrated && !state.logoHydrating) {
     hydrateLogo().then(() => {
       const settings = loadSettings();
