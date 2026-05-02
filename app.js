@@ -1,4 +1,5 @@
 import { products as seedProducts } from './products.js';
+import { DEFAULT_THEME_ID, THEME_PRESETS, getThemeDefaults, themePresetOptions } from './themes/index.js';
 
 const app = document.getElementById('app');
 const categories = ['All', 'T-Shirts', 'Hoodies', 'Long Sleeve', 'Accessories'];
@@ -15,34 +16,31 @@ const ADMIN_PIN_SESSION_KEY = 'merchCatalogSimpleAdminPin';
 const BACKEND_API_ENDPOINT = 'https://jjvbitlansidirrecrnt.functions.supabase.co/merch-catalog-api';
 const APP_VERSION = 'V3';
 
-const DEFAULT_SETTINGS = {
-  brandType: 'text',
-  wordmarkTop: 'CART',
-  wordmarkBottom: 'SKIP',
-  logoImage: '',
-  logoAlt: 'CartSkip logo',
-  logoMaxWidth: '180',
-  introEyebrow: 'Direct-pay storefront',
-  introTitle: 'Skip the cart. Take the order.',
-  introText: 'A simple storefront for sellers who want orders without accounts, carts, or card processing friction.',
-  footerTitle: 'CartSkip storefront',
-  footerText: 'No cart. No account. Just order and pay direct.',
+const APP_DEFAULT_SETTINGS = {
   requestEmail: 'orders@example.com',
   notificationsEnabled: 'on',
   notificationEndpoint: 'https://jjvbitlansidirrecrnt.functions.supabase.co/send-merch-request-notification',
   paymentCash: '$yourcashtag',
-  paymentVenmo: '@yourvenmo',
-  pageBg: '#e9e9ea',
-  panelBg: '#f4f4f4',
-  cardBg: '#ffffff',
-  headerBg: '#050505',
-  footerBg: '#050505',
-  textColor: '#090909',
-  mutedColor: '#6f6f73',
-  accentColor: '#d9ff00',
-  buttonTextColor: '#050505',
-  productImageBg: '#eeeeee',
-  cornerStyle: 'square'
+  paymentVenmo: '@yourvenmo'
+};
+
+const DEFAULT_SETTINGS = {
+  themePreset: DEFAULT_THEME_ID,
+  ...getThemeDefaults(DEFAULT_THEME_ID),
+  ...APP_DEFAULT_SETTINGS
+};
+
+const THEME_STYLE_MAP = {
+  pageBg: '--page-bg',
+  panelBg: '--panel',
+  cardBg: '--card',
+  headerBg: '--header-bg',
+  footerBg: '--footer-bg',
+  textColor: '--text',
+  mutedColor: '--muted',
+  accentColor: '--lime',
+  buttonTextColor: '--button-text',
+  productImageBg: '--product-image-bg'
 };
 
 const state = {
@@ -175,9 +173,14 @@ function cashAppHref(handle, amount, note = ''){
 
 function venmoHref(handle, amount, note = ''){
   const username = cleanPaymentHandle(handle, '@');
-  const params = new URLSearchParams({ txn: 'pay', amount: paymentAmount(amount) });
+  const params = new URLSearchParams({
+    txn: 'pay',
+    recipients: username,
+    amount: paymentAmount(amount),
+    audience: 'private'
+  });
   if (note) params.set('note', note);
-  return `https://venmo.com/${encodeURIComponent(username)}?${params.toString()}`;
+  return `https://venmo.com/?${params.toString()}`;
 }
 
 function escapeHtml(s){
@@ -194,10 +197,25 @@ function setBusy(v){
 }
 
 function loadSettings(){
+  const remoteSettings = state.remoteSettings || {};
   try {
-    return { ...DEFAULT_SETTINGS, ...(JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null') || {}), ...(state.remoteSettings || {}) };
+    const localSettings = JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null') || {};
+    const themePreset = remoteSettings.themePreset || localSettings.themePreset || DEFAULT_THEME_ID;
+    return {
+      ...DEFAULT_SETTINGS,
+      ...getThemeDefaults(themePreset),
+      ...localSettings,
+      ...remoteSettings,
+      themePreset: THEME_PRESETS[themePreset] ? themePreset : DEFAULT_THEME_ID
+    };
   } catch {
-    return { ...DEFAULT_SETTINGS, ...(state.remoteSettings || {}) };
+    const themePreset = remoteSettings.themePreset || DEFAULT_THEME_ID;
+    return {
+      ...DEFAULT_SETTINGS,
+      ...getThemeDefaults(themePreset),
+      ...remoteSettings,
+      themePreset: THEME_PRESETS[themePreset] ? themePreset : DEFAULT_THEME_ID
+    };
   }
 }
 
@@ -291,16 +309,10 @@ async function hydrateLogo(){
 
 function applyTheme(settings = loadSettings()){
   const root = document.documentElement;
-  root.style.setProperty('--page-bg', settings.pageBg);
-  root.style.setProperty('--panel', settings.panelBg);
-  root.style.setProperty('--card', settings.cardBg);
-  root.style.setProperty('--header-bg', settings.headerBg);
-  root.style.setProperty('--footer-bg', settings.footerBg);
-  root.style.setProperty('--text', settings.textColor);
-  root.style.setProperty('--muted', settings.mutedColor);
-  root.style.setProperty('--lime', settings.accentColor);
-  root.style.setProperty('--button-text', settings.buttonTextColor);
-  root.style.setProperty('--product-image-bg', settings.productImageBg);
+  document.body.dataset.theme = settings.themePreset || DEFAULT_THEME_ID;
+  Object.entries(THEME_STYLE_MAP).forEach(([key, cssVar]) => {
+    root.style.setProperty(cssVar, settings[key]);
+  });
   root.style.setProperty('--corner', settings.cornerStyle === 'rounded' ? '12px' : '0px');
 }
 
@@ -830,13 +842,10 @@ function renderProduct(product, params){
         <div class="requestStatus" id="requestStatus"></div>
         <div class="optionalPay">Pay direct with Cash App or Venmo</div>
         <div class="paymentBox">
-          <div class="paymentCopyGrid">
-            <button class="copyPayBtn" id="copyAmountBtn" type="button">Copy amount</button>
-            <button class="copyPayBtn" id="copyNoteBtn" type="button">Copy order note</button>
-          </div>
-          <div class="copyStatus" id="copyStatus" aria-live="polite"></div>
           <div class="payRow"><a class="payBtn" id="cashPay" href="#" target="_blank" rel="noreferrer">${icon('cash')} Cash App</a><a class="payBtn" id="venmoPay" href="#" target="_blank" rel="noreferrer">${icon('venmo')} Venmo</a></div>
-          <div class="paymentHint" id="paymentHint">Copy the amount first, then open Cash App or Venmo. Vendor confirms payment manually.</div>
+          <button class="copyDetailsBtn" id="copyDetailsBtn" type="button">Copy payment details</button>
+          <div class="copyStatus" id="copyStatus" aria-live="polite"></div>
+          <div class="paymentHint" id="paymentHint">If your payment app opens at $0, copy the payment details and paste them.</div>
         </div>
       </section>
       ${siteFooter()}
@@ -869,8 +878,7 @@ function renderProduct(product, params){
   const cashPay = app.querySelector('#cashPay');
   const venmoPay = app.querySelector('#venmoPay');
   const paymentHint = app.querySelector('#paymentHint');
-  const copyAmountBtn = app.querySelector('#copyAmountBtn');
-  const copyNoteBtn = app.querySelector('#copyNoteBtn');
+  const copyDetailsBtn = app.querySelector('#copyDetailsBtn');
   const copyStatus = app.querySelector('#copyStatus');
 
   function currentPaymentTotal(){
@@ -886,19 +894,18 @@ function renderProduct(product, params){
     const note = currentPaymentNote();
     cashPay.href = cashAppHref(settings.paymentCash, total, note);
     venmoPay.href = venmoHref(settings.paymentVenmo, total, note);
-    copyAmountBtn.dataset.copyValue = paymentAmount(total);
-    copyNoteBtn.dataset.copyValue = note;
-    paymentHint.innerHTML = `Copy <strong>${money(total)}</strong>${selQty > 1 ? ` total (${money(product.price)} × ${selQty})` : ''}, then open Cash App or Venmo. If the app shows $0, paste the copied amount.`;
+    copyDetailsBtn.dataset.copyValue = [`Amount: ${paymentAmount(total)}`, `Order note: ${note}`].join('\n');
+    paymentHint.innerHTML = `Payment total: <strong>${money(total)}</strong>${selQty > 1 ? ` (${money(product.price)} × ${selQty})` : ''}. If an app opens at $0, copy payment details and paste the amount.`;
   }
 
-  async function copyPaymentValue(button, label){
-    const value = button?.dataset.copyValue || '';
+  async function copyPaymentDetails(){
+    const value = copyDetailsBtn?.dataset.copyValue || '';
     if (!value) return;
     try {
       await navigator.clipboard.writeText(value);
-      copyStatus.textContent = `${label} copied: ${value}`;
+      copyStatus.textContent = 'Payment details copied.';
     } catch {
-      copyStatus.textContent = `${label}: ${value}`;
+      copyStatus.textContent = value.replace(/\n/g, ' • ');
     }
   }
 
@@ -908,8 +915,7 @@ function renderProduct(product, params){
     updatePaymentLinks();
   }
   updatePaymentLinks();
-  copyAmountBtn.addEventListener('click', () => copyPaymentValue(copyAmountBtn, 'Amount'));
-  copyNoteBtn.addEventListener('click', () => copyPaymentValue(copyNoteBtn, 'Order note'));
+  copyDetailsBtn.addEventListener('click', copyPaymentDetails);
   app.querySelector('#qtyMinus').addEventListener('click', () => setQty(selQty - 1));
   app.querySelector('#qtyPlus').addEventListener('click', () => setQty(selQty + 1));
 
@@ -1097,6 +1103,17 @@ function settingsField(label, key, value, type = 'text'){
       </label>
     `;
   }
+  if (type === 'theme-select') {
+    const options = themePresetOptions(value || DEFAULT_THEME_ID).map(theme => `
+          <option value="${escapeHtml(theme.id)}" ${theme.selected ? 'selected' : ''}>${escapeHtml(theme.name)}</option>`).join('');
+    return `
+      <label class="settingsField wide">
+        <span>${escapeHtml(label)}</span>
+        <select data-setting="${key}">${options}
+        </select>
+      </label>
+    `;
+  }
   if (type === 'toggle-select') {
     return `
       <label class="settingsField">
@@ -1169,6 +1186,7 @@ function renderSettingsAdmin(){
           <div class="adminSaveMsg" id="adminPinSaveMsg"></div>
         </div>
         <div class="settingsSectionTitle">Theme</div>
+        ${settingsField('Theme preset', 'themePreset', settings.themePreset, 'theme-select')}
         ${settingsField('Header background', 'headerBg', settings.headerBg, 'color')}
         ${settingsField('Footer background', 'footerBg', settings.footerBg, 'color')}
         ${settingsField('Page background', 'pageBg', settings.pageBg, 'color')}
@@ -1365,6 +1383,19 @@ function renderAdmin(tab = 'requests'){
     if (preview) preview.innerHTML = `<img src="${dataUrl}" alt="Logo preview" />`;
     const hint = app.querySelector('#logoUploadHint');
     if (hint) hint.textContent = 'Logo ready. Click Save Settings.';
+  });
+
+  const themePresetSelect = app.querySelector('[data-setting="themePreset"]');
+  if (themePresetSelect) themePresetSelect.addEventListener('change', () => {
+    const presetSettings = getThemeDefaults(themePresetSelect.value);
+    Object.entries(presetSettings).forEach(([key, value]) => {
+      if (key === 'logoImage') return;
+      const field = app.querySelector(`[data-setting="${key}"]`);
+      if (field && field.type !== 'file') field.value = value;
+    });
+    applyTheme({ ...loadSettings(), ...presetSettings, themePreset: themePresetSelect.value });
+    const msg = app.querySelector('#settingsSaveMsg');
+    if (msg) msg.textContent = 'Theme preset loaded. Click Save Settings to publish it.';
   });
 
   const saveSettingsBtn = app.querySelector('#saveSettingsBtn');

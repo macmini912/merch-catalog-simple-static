@@ -159,13 +159,12 @@ select{width:100%;height:45px;border:1px solid #d9d9dc;border-radius:0;backgroun
 .successBtn.secondary{background:#111;color:#fff}
 .primaryBtn:disabled,.sizePill:disabled,.qtyStepper button:disabled{opacity:.55;cursor:not-allowed}
 .optionalPay{text-align:center;color:#777;font-size:13px;margin:22px 0 12px}
-.paymentBox{display:grid;gap:10px;background:#fff;border:1px solid #dedee2;padding:12px}
-.paymentCopyGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.copyPayBtn{height:42px;border:1px solid #111;background:#111;color:#fff;border-radius:0;font-size:12px;font-weight:950;text-transform:uppercase;letter-spacing:.03em}
-.copyStatus{min-height:18px;text-align:center;color:#333;font-size:12px;font-weight:850}
+.paymentBox{display:grid;gap:9px;background:#fff;border:1px solid #dedee2;padding:12px}
 .payRow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .payBtn{height:45px;border:1px solid #d8d8dc;background:#f8f8f8;border-radius:0;display:flex;align-items:center;justify-content:center;gap:9px;text-decoration:none;color:#161616;font-weight:850;box-shadow:0 4px 12px rgba(0,0,0,.04)}
 .payBtn svg{width:23px;height:23px;stroke-width:0}
+.copyDetailsBtn{justify-self:center;border:0;background:transparent;color:#333;text-decoration:underline;text-underline-offset:3px;padding:4px 8px;font-size:12px;font-weight:850}
+.copyStatus{min-height:16px;text-align:center;color:#333;font-size:12px;font-weight:850}
 .paymentHint{text-align:center;color:#777;font-size:12px;line-height:1.45}
 
 .app[aria-busy="true"]{cursor:progress}
