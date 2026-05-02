@@ -13,7 +13,8 @@ const EMPTY_IMAGE_SRC = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAA
 const ADMIN_PASSWORD_KEY = 'merchCatalogSimpleAdminPassword';
 const ADMIN_UNLOCK_KEY = 'merchCatalogSimpleAdminUnlocked';
 const ADMIN_PIN_SESSION_KEY = 'merchCatalogSimpleAdminPin';
-const BACKEND_API_ENDPOINT = 'https://jjvbitlansidirrecrnt.functions.supabase.co/merch-catalog-api';
+const SUPABASE_BACKEND_API_ENDPOINT = 'https://jjvbitlansidirrecrnt.functions.supabase.co/merch-catalog-api';
+const BACKEND_API_ENDPOINT = location.hostname.endsWith('.pages.dev') ? '/api/merch-catalog-api' : SUPABASE_BACKEND_API_ENDPOINT;
 const APP_VERSION = 'V3';
 
 const APP_DEFAULT_SETTINGS = {
