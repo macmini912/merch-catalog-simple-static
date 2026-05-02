@@ -53,7 +53,8 @@ const state = {
   backendHydrating: false,
   remoteSettings: null,
   remoteProducts: null,
-  remoteRequests: null
+  remoteRequests: null,
+  adminSyncAttempted: false
 };
 
 function openDB(){
@@ -214,11 +215,18 @@ async function syncBackend({ admin = false, force = false } = {}){
       if (data.settings.logoImage) state.logoImage = data.settings.logoImage;
     }
     if (Array.isArray(data.products)) state.remoteProducts = data.products;
-    if (Array.isArray(data.requests)) state.remoteRequests = data.requests;
+    if (admin) {
+      state.adminSyncAttempted = true;
+      state.remoteRequests = Array.isArray(data.requests) ? data.requests : loadRequests();
+    }
     state.backendHydrated = true;
     return true;
   } catch (err) {
     console.warn('Backend sync skipped:', err?.message || err);
+    if (admin) {
+      state.adminSyncAttempted = true;
+      state.remoteRequests = loadRequests();
+    }
     state.backendHydrated = true;
     return false;
   } finally {
@@ -1344,7 +1352,7 @@ function renderAdmin(tab = 'requests'){
 function wire(){
   applyTheme();
   const route = parseRoute();
-  const needsAdminSync = route.view === 'admin' && isAdminUnlocked() && state.remoteRequests === null;
+  const needsAdminSync = route.view === 'admin' && isAdminUnlocked() && !state.adminSyncAttempted;
   if ((!state.backendHydrated || needsAdminSync) && !state.backendHydrating) {
     app.innerHTML = `${siteHeader()}<main class="catalogPanel"><section class="catalogIntro"><span class="eyebrow">Loading</span><h1>Syncing catalog...</h1><p>Pulling the shared catalog data.</p></section></main>${siteFooter()}`;
     const timeout = new Promise(resolve => setTimeout(() => resolve(false), 5000));
