@@ -160,11 +160,17 @@ function cleanPaymentHandle(handle, prefix){
     .split(/[/?#]/)[0];
 }
 
+function cashAppAmountPath(n){
+  const amount = paymentAmount(n);
+  return amount.endsWith('.00') ? amount.slice(0, -3) : amount;
+}
+
 function cashAppHref(handle, amount, note = ''){
   const cashtag = cleanPaymentHandle(handle, '$');
-  const params = new URLSearchParams({ amount: paymentAmount(amount) });
+  const params = new URLSearchParams();
   if (note) params.set('note', note);
-  return `https://cash.app/$${encodeURIComponent(cashtag)}?${params.toString()}`;
+  const query = params.toString();
+  return `https://cash.app/$${encodeURIComponent(cashtag)}/${encodeURIComponent(cashAppAmountPath(amount))}${query ? `?${query}` : ''}`;
 }
 
 function venmoHref(handle, amount, note = ''){
