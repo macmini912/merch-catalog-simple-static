@@ -7,6 +7,8 @@ const PRODUCTS_KEY = 'merchCatalogSimpleProducts';
 const SETTINGS_KEY = 'merchCatalogSimpleSettings';
 const DB_NAME = 'merchCatalogSimpleDB';
 const LOGO_IDB_KEY = 'logoImage';
+const PRODUCT_IMAGE_PREFIX = 'productImage';
+const EMPTY_IMAGE_SRC = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 const ADMIN_PASSWORD_KEY = 'merchCatalogSimpleAdminPassword';
 const ADMIN_UNLOCK_KEY = 'merchCatalogSimpleAdminUnlocked';
 
@@ -86,6 +88,49 @@ async function idbRemove(key){
     req.onsuccess = () => resolve();
     req.onerror = () => reject(req.error || new Error('IndexedDB delete failed'));
   });
+}
+
+function productImageKey(productId, index){
+  return `${PRODUCT_IMAGE_PREFIX}:${productId}:${index}`;
+}
+
+function productImageRef(productId, index){
+  return `idb://${productImageKey(productId, index)}`;
+}
+
+function isProductImageRef(src){
+  return String(src || '').startsWith(`idb://${PRODUCT_IMAGE_PREFIX}:`);
+}
+
+function refToKey(ref){
+  return String(ref || '').replace(/^idb:\/\//, '');
+}
+
+async function resolveImageSrc(src){
+  if (!isProductImageRef(src)) return src || EMPTY_IMAGE_SRC;
+  return await idbGet(refToKey(src)) || EMPTY_IMAGE_SRC;
+}
+
+function imageSrcAttr(src){
+  return isProductImageRef(src) ? EMPTY_IMAGE_SRC : (src || EMPTY_IMAGE_SRC);
+}
+
+function imageRefAttr(src){
+  return isProductImageRef(src) ? ` data-image-ref="${escapeHtml(src)}"` : '';
+}
+
+async function hydrateProductImages(root = app){
+  const imgs = [...root.querySelectorAll('img[data-image-ref]')];
+  await Promise.all(imgs.map(async img => {
+    const ref = img.getAttribute('data-image-ref');
+    img.src = await resolveImageSrc(ref);
+  }));
+}
+
+async function setImageElementSource(img, src){
+  if (!img) return;
+  img.src = imageSrcAttr(src);
+  if (isProductImageRef(src)) img.src = await resolveImageSrc(src);
 }
 
 function money(n){
@@ -251,7 +296,12 @@ function loadProducts(){
 }
 
 function saveProducts(products){
-  localStorage.setItem(PRODUCTS_KEY, JSON.stringify(products.map(normalizeProduct)));
+  const compact = products.map(normalizeProduct).map(product => ({
+    ...product,
+    images: (product.images || []).map(src => String(src || '').startsWith('data:image/') ? '' : src).filter(Boolean).slice(0, 2)
+  }));
+  localStorage.removeItem(PRODUCTS_KEY);
+  localStorage.setItem(PRODUCTS_KEY, JSON.stringify(compact));
 }
 
 function resetProducts(){
@@ -398,7 +448,7 @@ function productEditorHtml(){
               return `
                 <div class="imageThumb ${src ? '' : 'empty'}" data-index="${index}">
                   <strong>${label}</strong>
-                  ${src ? `<img src="${escapeHtml(src)}" alt="${escapeHtml(product.name)} ${label.toLowerCase()} image" />` : `<div class="imageSlotEmpty">No ${label.toLowerCase()} image</div>`}
+                  ${src ? `<img src="${escapeHtml(imageSrcAttr(src))}"${imageRefAttr(src)} alt="${escapeHtml(product.name)} ${label.toLowerCase()} image" />` : `<div class="imageSlotEmpty">No ${label.toLowerCase()} image</div>`}
                   <div class="imageThumbActions">
                     <label>Upload<input data-field="upload-${index}" type="file" accept="image/*" /></label>
                     <button type="button" data-action="remove-image" aria-label="Remove ${label.toLowerCase()} image">Remove</button>
@@ -409,7 +459,7 @@ function productEditorHtml(){
           </div>
           <details>
             <summary>Advanced image paths (max 2 total)</summary>
-            <textarea data-field="images">${escapeHtml((product.images || []).filter(src => !String(src).startsWith('data:')).join('\n'))}</textarea>
+            <textarea data-field="images">${escapeHtml((product.images || []).filter(src => !String(src).startsWith('data:') && !isProductImageRef(src)).join('\n'))}</textarea>
           </details>
         </div>
         <div class="wide productInlineActions">
@@ -429,10 +479,18 @@ async function readProductEditorItem(item){
   const stateImages = safeJson(item.querySelector('[data-field="imageState"]')?.value || '[]', []).slice(0, 2);
   const advancedImages = splitImages(read('images')).slice(0, 2);
   const imageList = [0, 1].map(index => advancedImages[index] || stateImages[index] || '');
+  const productId = original.id || item.dataset.id || slugify(name);
   for (const index of [0, 1]) {
     const file = item.querySelector(`[data-field="upload-${index}"]`)?.files?.[0];
-    if (file) imageList[index] = await imageFileToDataUrl(file, { maxSize: 700, quality: 0.72 });
-    else if (String(imageList[index] || '').startsWith('data:image/')) imageList[index] = await compressImageSource(imageList[index], { maxSize: 700, quality: 0.72 });
+    if (file) {
+      const dataUrl = await imageFileToDataUrl(file, { maxSize: 900, quality: 0.78 });
+      await idbSet(productImageKey(productId, index), dataUrl);
+      imageList[index] = productImageRef(productId, index);
+    } else if (String(imageList[index] || '').startsWith('data:image/')) {
+      const dataUrl = await compressImageSource(imageList[index], { maxSize: 900, quality: 0.78 });
+      await idbSet(productImageKey(productId, index), dataUrl);
+      imageList[index] = productImageRef(productId, index);
+    }
   }
   const finalImages = imageList.filter(Boolean).slice(0, 2);
 
@@ -548,7 +606,7 @@ function renderCatalog(){
   grid.innerHTML = visible.map(product => `
     <article class="productCard" data-slug="${escapeHtml(product.slug)}">
       <button class="heartBtn" type="button" aria-label="Favorite">${icon('heart')}</button>
-      <div class="productImage"><img src="${product.images[0]}" alt="${escapeHtml(product.name)}" /></div>
+      <div class="productImage"><img src="${escapeHtml(imageSrcAttr(product.images[0]))}"${imageRefAttr(product.images[0])} alt="${escapeHtml(product.name)}" /></div>
       <div class="productInfo">
         <h2>${escapeHtml(product.name)}</h2>
         <div class="cardPrice">${money(product.price)}</div>
@@ -564,6 +622,8 @@ function renderCatalog(){
       navProduct(product.slug, { size: product.sizes[2] || product.sizes[0], qty: 1 });
     });
   });
+
+  hydrateProductImages(grid);
 
 }
 
@@ -642,7 +702,7 @@ function renderProduct(product, params){
       <section class="detailHero">
         <button class="iconBtn backBtn" type="button" id="backBtn" aria-label="Back">${icon('back')}</button>
         <button class="iconBtn favoriteBtn" type="button" aria-label="Favorite">${icon('heart')}</button>
-        <img id="heroImg" src="${product.images[0]}" alt="${escapeHtml(product.name)}" />
+        <img id="heroImg" src="${escapeHtml(imageSrcAttr(product.images[0]))}"${imageRefAttr(product.images[0])} alt="${escapeHtml(product.name)}" />
       </section>
       <div class="imageDots" id="imageDots"></div>
       <section class="detailBody">
@@ -671,11 +731,12 @@ function renderProduct(product, params){
     dots.innerHTML = product.images.map((_, i) => `<button type="button" aria-current="${i === currentImg ? 'true' : 'false'}" aria-label="Image ${i + 1}"></button>`).join('');
     dots.querySelectorAll('button').forEach((b, i) => b.addEventListener('click', () => {
       currentImg = i;
-      heroImg.src = product.images[i];
+      setImageElementSource(heroImg, product.images[i]);
       renderDots();
     }));
   }
   renderDots();
+  hydrateProductImages(app.querySelector('.detailPage'));
 
   const sizeRow = app.querySelector('#sizeRow');
   function renderSizes(){
@@ -1044,6 +1105,7 @@ function renderAdmin(tab = 'requests'){
   app.querySelectorAll('[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => navAdmin(btn.dataset.tab));
   });
+  hydrateProductImages(app);
 
   const saveProductsBtn = app.querySelector('#saveProductsBtn');
   if (saveProductsBtn) saveProductsBtn.addEventListener('click', async () => {
@@ -1097,7 +1159,8 @@ function renderAdmin(tab = 'requests'){
     const next = [...images];
     next[index] = '';
     if (stateInput) stateInput.value = JSON.stringify(next);
-    if (advanced && removed && !String(removed).startsWith('data:')) {
+    if (isProductImageRef(removed)) idbRemove(refToKey(removed)).catch(() => {});
+    if (advanced && removed && !String(removed).startsWith('data:') && !isProductImageRef(removed)) {
       advanced.value = splitImages(advanced.value).filter(src => src !== removed).join('\n');
     }
     thumb.classList.add('empty');
