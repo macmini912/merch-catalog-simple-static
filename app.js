@@ -415,7 +415,6 @@ function addRequest(entry){
   const requests = [entry, ...loadRequests()];
   saveRequests(requests);
   state.remoteRequests = requests;
-  apiRequest('addRequest', { request: entry }).catch(err => console.warn('Shared request save failed:', err?.message || err));
   return entry;
 }
 
@@ -742,40 +741,18 @@ function fmtSummary({ product, size, qty, notes, customerName = '', customerCont
 }
 
 async function sendRequestNotification({ request, product, settings, summary }){
-  if (settings.notificationsEnabled !== 'on') return { ok: true, skipped: true, reason: 'Email notifications are off.' };
-  const endpoint = String(settings.notificationEndpoint || '').trim();
-  if (!endpoint) return { ok: false, skipped: true, reason: 'Email notification endpoint is missing.' };
-
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      source: 'merch-catalog-simple',
-      store: {
-        wordmarkTop: settings.wordmarkTop,
-        wordmarkBottom: settings.wordmarkBottom,
-        requestEmail: settings.requestEmail
-      },
-      request,
-      product: {
-        id: product.id,
-        name: product.name,
-        type: product.type,
-        price: product.price
-      },
-      summary
-    })
+  const result = await apiRequest('addRequest', {
+    source: 'merch-catalog-simple',
+    store: {
+      wordmarkTop: settings.wordmarkTop,
+      wordmarkBottom: settings.wordmarkBottom,
+      requestEmail: settings.requestEmail
+    },
+    request,
+    product: { id: product.id, name: product.name, type: product.type, price: product.price },
+    summary
   });
-
-  if (!res.ok) {
-    let message = `Email notification failed (${res.status}).`;
-    try {
-      const data = await res.json();
-      if (data?.error) message = data.error;
-    } catch {}
-    throw new Error(message);
-  }
-
+  if (result.notification?.error) return { ok: false, warning: result.notification.error };
   return { ok: true };
 }
 
@@ -889,8 +866,8 @@ function renderProduct(product, params){
     let notificationNotice = '';
     try {
       const result = await sendRequestNotification({ request, product, settings, summary });
-      if (!result.skipped) notificationNotice = '<div class="notificationNotice sent">Email notification sent.</div>';
-      else if (settings.notificationsEnabled === 'on') notificationNotice = `<div class="notificationNotice warning">${escapeHtml(result.reason)}</div>`;
+      if (result.warning) notificationNotice = `<div class="notificationNotice warning">Request saved, but email notification did not send. ${escapeHtml(result.warning)}</div>`;
+      else notificationNotice = '<div class="notificationNotice sent">Request saved and email notification sent.</div>';
     } catch (err) {
       notificationNotice = `<div class="notificationNotice warning">Request saved, but email notification did not send. ${escapeHtml(err?.message || err)}</div>`;
     }
@@ -1112,13 +1089,12 @@ function renderAdminLock(){
       ${siteHeader()}
       <section class="adminLockPanel">
         <span class="eyebrow">Admin access</span>
-        <h1>${setupMode ? 'Set admin password' : 'Unlock admin'}</h1>
-        <p>${setupMode ? 'Create a local password for this browser before managing products and requests.' : 'Enter the admin password to manage products and requests.'}</p>
-        <label>Password<input id="adminPasswordInput" type="password" autocomplete="current-password" /></label>
-        ${setupMode ? `<label>Confirm password<input id="adminPasswordConfirm" type="password" autocomplete="new-password" /></label>` : ''}
-        <button class="primaryBtn" id="adminUnlockBtn" type="button">${setupMode ? 'Set Password' : 'Unlock'}</button>
-        ${setupMode ? '' : `<button class="resetAdminBtn" id="resetAdminPasswordBtn" type="button">Reset local admin password</button>`}
-        ${setupMode ? '' : `<div class="adminResetHint">Only resets this browser’s admin password. Products and requests stay saved.</div>`}
+        <h1>Admin PIN</h1>
+        <p>Enter the shared admin PIN to manage products, settings, and requests.</p>
+        <label>Admin PIN<input id="adminPasswordInput" type="password" autocomplete="current-password" /></label>
+        <button class="primaryBtn" id="adminUnlockBtn" type="button">Unlock</button>
+        <button class="resetAdminBtn" id="resetAdminPasswordBtn" type="button">Reset local admin PIN</button>
+        <div class="adminResetHint">This only clears the saved unlock state in this browser.</div>
         <div class="adminLockMsg" id="adminLockMsg"></div>
       </section>
       ${siteFooter()}
@@ -1126,7 +1102,7 @@ function renderAdminLock(){
   `;
 
   const password = app.querySelector('#adminPasswordInput');
-  const confirmInput = app.querySelector('#adminPasswordConfirm');
+  const confirmInput = null;
   const msg = app.querySelector('#adminLockMsg');
   const submit = async () => {
     const value = password.value.trim();
@@ -1134,18 +1110,8 @@ function renderAdminLock(){
       msg.textContent = 'Use at least 4 characters.';
       return;
     }
-    if (setupMode) {
-      if (value !== confirmInput.value.trim()) {
-        msg.textContent = 'Passwords do not match.';
-        return;
-      }
-      await setAdminPassword(value);
-      navAdmin('settings');
-      return;
-    }
-    const ok = await unlockAdmin(value);
-    if (ok) navAdmin('settings');
-    else msg.textContent = 'Incorrect password.';
+    await setAdminPassword(value);
+    navAdmin('settings');
   };
   app.querySelector('#adminUnlockBtn').addEventListener('click', submit);
   app.querySelector('#resetAdminPasswordBtn')?.addEventListener('click', () => {
