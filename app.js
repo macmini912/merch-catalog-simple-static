@@ -1124,6 +1124,18 @@ function renderSettingsAdmin(){
         ${settingsField('Notification endpoint', 'notificationEndpoint', settings.notificationEndpoint, 'url')}
         ${settingsField('Cash App', 'paymentCash', settings.paymentCash)}
         ${settingsField('Venmo', 'paymentVenmo', settings.paymentVenmo)}
+        <div class="settingsSectionTitle">Admin access</div>
+        <div class="settingsField wide adminAccessSettings">
+          <span>Saved admin PIN for this browser</span>
+          <p>This does not change the server master PIN. It updates the PIN this browser uses to unlock and sync admin data.</p>
+          <label>New admin PIN<input id="newAdminPinInput" type="password" autocomplete="new-password" placeholder="Enter current server PIN" /></label>
+          <div class="adminPasswordActions">
+            <button type="button" class="secondaryAdminBtn" id="saveAdminPinBtn">Save Admin PIN</button>
+            <button type="button" class="resetAdminBtn" id="clearAdminPinBtn">Clear Saved PIN</button>
+          </div>
+          <div class="adminResetHint">To change the actual master PIN, update the Supabase <code>MERCH_ADMIN_PIN</code> secret.</div>
+          <div class="adminSaveMsg" id="adminPinSaveMsg"></div>
+        </div>
         <div class="settingsSectionTitle">Theme</div>
         ${settingsField('Header background', 'headerBg', settings.headerBg, 'color')}
         ${settingsField('Footer background', 'footerBg', settings.footerBg, 'color')}
@@ -1359,6 +1371,32 @@ function renderAdmin(tab = 'requests'){
       return;
     }
     renderAdmin('settings');
+  });
+
+  const saveAdminPinBtn = app.querySelector('#saveAdminPinBtn');
+  if (saveAdminPinBtn) saveAdminPinBtn.addEventListener('click', async () => {
+    const input = app.querySelector('#newAdminPinInput');
+    const msg = app.querySelector('#adminPinSaveMsg');
+    const value = input?.value.trim() || '';
+    if (value.length < 4) {
+      msg.textContent = 'Use at least 4 characters.';
+      return;
+    }
+    try {
+      await setAdminPassword(value);
+      msg.textContent = 'Admin PIN saved for this browser.';
+      input.value = '';
+    } catch (err) {
+      msg.textContent = err?.message || 'Admin PIN save failed.';
+    }
+  });
+
+  const clearAdminPinBtn = app.querySelector('#clearAdminPinBtn');
+  if (clearAdminPinBtn) clearAdminPinBtn.addEventListener('click', () => {
+    const ok = window.confirm('Clear the saved admin PIN for this browser? You will need to unlock admin again.');
+    if (!ok) return;
+    resetAdminPassword();
+    renderAdminLock();
   });
 
   const resetSettingsBtn = app.querySelector('#resetSettingsBtn');
