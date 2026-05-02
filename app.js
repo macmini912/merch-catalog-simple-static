@@ -13,7 +13,7 @@ const ADMIN_PASSWORD_KEY = 'merchCatalogSimpleAdminPassword';
 const ADMIN_UNLOCK_KEY = 'merchCatalogSimpleAdminUnlocked';
 const ADMIN_PIN_SESSION_KEY = 'merchCatalogSimpleAdminPin';
 const BACKEND_API_ENDPOINT = 'https://jjvbitlansidirrecrnt.functions.supabase.co/merch-catalog-api';
-const APP_VERSION = 'V2';
+const APP_VERSION = 'V3';
 
 const DEFAULT_SETTINGS = {
   brandType: 'text',
