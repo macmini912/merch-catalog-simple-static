@@ -145,6 +145,32 @@ function money(n){
   return `$${Number(n).toFixed(2)}`;
 }
 
+function paymentAmount(n){
+  return Number(n || 0).toFixed(2);
+}
+
+function cleanPaymentHandle(handle, prefix){
+  return String(handle || '')
+    .trim()
+    .replace(/^https?:\/\/(www\.)?cash\.app\//i, '')
+    .replace(/^https?:\/\/(www\.)?venmo\.com\//i, '')
+    .replace(/^\/+/,'')
+    .replace(prefix, '')
+    .split(/[/?#]/)[0];
+}
+
+function cashAppHref(handle, amount){
+  const cashtag = cleanPaymentHandle(handle, '$');
+  return `https://cash.app/$${encodeURIComponent(cashtag)}/${encodeURIComponent(paymentAmount(amount))}`;
+}
+
+function venmoHref(handle, amount, note = ''){
+  const username = cleanPaymentHandle(handle, '@');
+  const params = new URLSearchParams({ txn: 'pay', amount: paymentAmount(amount) });
+  if (note) params.set('note', note);
+  return `https://venmo.com/${encodeURIComponent(username)}?${params.toString()}`;
+}
+
 function escapeHtml(s){
   return String(s)
     .replaceAll('&','&amp;')
@@ -793,8 +819,8 @@ function renderProduct(product, params){
         <button class="primaryBtn requestCta" id="requestBtn" type="button">Request this item</button>
         <div class="requestStatus" id="requestStatus"></div>
         <div class="optionalPay">Optional: Send payment with your request</div>
-        <div class="payRow"><a class="payBtn" href="https://cash.app/${escapeHtml(settings.paymentCash.replace('$',''))}" target="_blank" rel="noreferrer">${icon('cash')} Cash App</a><a class="payBtn" href="https://venmo.com/${escapeHtml(settings.paymentVenmo.replace('@',''))}" target="_blank" rel="noreferrer">${icon('venmo')} Venmo</a></div>
-        <div class="paymentHint">Payment is optional and not required.</div>
+        <div class="payRow"><a class="payBtn" id="cashPay" href="#" target="_blank" rel="noreferrer">${icon('cash')} Cash App</a><a class="payBtn" id="venmoPay" href="#" target="_blank" rel="noreferrer">${icon('venmo')} Venmo</a></div>
+        <div class="paymentHint" id="paymentHint">Payment is optional and not required.</div>
       </section>
       ${siteFooter()}
     </main>
@@ -818,15 +844,36 @@ function renderProduct(product, params){
   const sizeRow = app.querySelector('#sizeRow');
   function renderSizes(){
     sizeRow.innerHTML = '';
-    product.sizes.forEach(size => sizeRow.appendChild(sizePill(size, size === selSize, () => { selSize = size; renderSizes(); })));
+    product.sizes.forEach(size => sizeRow.appendChild(sizePill(size, size === selSize, () => { selSize = size; renderSizes(); updatePaymentLinks(); })));
   }
   renderSizes();
 
   const qtyVal = app.querySelector('#qtyVal');
+  const cashPay = app.querySelector('#cashPay');
+  const venmoPay = app.querySelector('#venmoPay');
+  const paymentHint = app.querySelector('#paymentHint');
+
+  function currentPaymentTotal(){
+    return Number(product.price || 0) * selQty;
+  }
+
+  function currentPaymentNote(){
+    return `${product.name} - ${selSize} - Qty ${selQty}`;
+  }
+
+  function updatePaymentLinks(){
+    const total = currentPaymentTotal();
+    cashPay.href = cashAppHref(settings.paymentCash, total);
+    venmoPay.href = venmoHref(settings.paymentVenmo, total, currentPaymentNote());
+    paymentHint.innerHTML = `Payment is optional and not required. Links open with <strong>${money(total)}</strong>${selQty > 1 ? ` total (${money(product.price)} × ${selQty})` : ''}.`;
+  }
+
   function setQty(next){
     selQty = Math.max(1, Math.min(99, next));
     qtyVal.textContent = String(selQty);
+    updatePaymentLinks();
   }
+  updatePaymentLinks();
   app.querySelector('#qtyMinus').addEventListener('click', () => setQty(selQty - 1));
   app.querySelector('#qtyPlus').addEventListener('click', () => setQty(selQty + 1));
 
