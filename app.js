@@ -823,8 +823,15 @@ function renderProduct(product, params){
         <button class="primaryBtn requestCta" id="requestBtn" type="button">Submit order</button>
         <div class="requestStatus" id="requestStatus"></div>
         <div class="optionalPay">Pay direct with Cash App or Venmo</div>
-        <div class="payRow"><a class="payBtn" id="cashPay" href="#" target="_blank" rel="noreferrer">${icon('cash')} Cash App</a><a class="payBtn" id="venmoPay" href="#" target="_blank" rel="noreferrer">${icon('venmo')} Venmo</a></div>
-        <div class="paymentHint" id="paymentHint">Payment opens in your selected app. Vendor confirms payment manually.</div>
+        <div class="paymentBox">
+          <div class="paymentCopyGrid">
+            <button class="copyPayBtn" id="copyAmountBtn" type="button">Copy amount</button>
+            <button class="copyPayBtn" id="copyNoteBtn" type="button">Copy order note</button>
+          </div>
+          <div class="copyStatus" id="copyStatus" aria-live="polite"></div>
+          <div class="payRow"><a class="payBtn" id="cashPay" href="#" target="_blank" rel="noreferrer">${icon('cash')} Cash App</a><a class="payBtn" id="venmoPay" href="#" target="_blank" rel="noreferrer">${icon('venmo')} Venmo</a></div>
+          <div class="paymentHint" id="paymentHint">Copy the amount first, then open Cash App or Venmo. Vendor confirms payment manually.</div>
+        </div>
       </section>
       ${siteFooter()}
     </main>
@@ -856,6 +863,9 @@ function renderProduct(product, params){
   const cashPay = app.querySelector('#cashPay');
   const venmoPay = app.querySelector('#venmoPay');
   const paymentHint = app.querySelector('#paymentHint');
+  const copyAmountBtn = app.querySelector('#copyAmountBtn');
+  const copyNoteBtn = app.querySelector('#copyNoteBtn');
+  const copyStatus = app.querySelector('#copyStatus');
 
   function currentPaymentTotal(){
     return Number(product.price || 0) * selQty;
@@ -867,9 +877,23 @@ function renderProduct(product, params){
 
   function updatePaymentLinks(){
     const total = currentPaymentTotal();
-    cashPay.href = cashAppHref(settings.paymentCash, total, currentPaymentNote());
-    venmoPay.href = venmoHref(settings.paymentVenmo, total, currentPaymentNote());
-    paymentHint.innerHTML = `Payment links open with <strong>${money(total)}</strong>${selQty > 1 ? ` total (${money(product.price)} × ${selQty})` : ''}. Vendor confirms payment manually.`;
+    const note = currentPaymentNote();
+    cashPay.href = cashAppHref(settings.paymentCash, total, note);
+    venmoPay.href = venmoHref(settings.paymentVenmo, total, note);
+    copyAmountBtn.dataset.copyValue = paymentAmount(total);
+    copyNoteBtn.dataset.copyValue = note;
+    paymentHint.innerHTML = `Copy <strong>${money(total)}</strong>${selQty > 1 ? ` total (${money(product.price)} × ${selQty})` : ''}, then open Cash App or Venmo. If the app shows $0, paste the copied amount.`;
+  }
+
+  async function copyPaymentValue(button, label){
+    const value = button?.dataset.copyValue || '';
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      copyStatus.textContent = `${label} copied: ${value}`;
+    } catch {
+      copyStatus.textContent = `${label}: ${value}`;
+    }
   }
 
   function setQty(next){
@@ -878,6 +902,8 @@ function renderProduct(product, params){
     updatePaymentLinks();
   }
   updatePaymentLinks();
+  copyAmountBtn.addEventListener('click', () => copyPaymentValue(copyAmountBtn, 'Amount'));
+  copyNoteBtn.addEventListener('click', () => copyPaymentValue(copyNoteBtn, 'Order note'));
   app.querySelector('#qtyMinus').addEventListener('click', () => setQty(selQty - 1));
   app.querySelector('#qtyPlus').addEventListener('click', () => setQty(selQty + 1));
 
